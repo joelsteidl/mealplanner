@@ -5,15 +5,16 @@ import { redirect } from "next/navigation";
 import { Metadata } from "next";
 
 interface Props {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
   const recipe = await client.fetch(
     `*[_type == "recipe" && _id == $id][0].title`,
-    { id: params.id }
+    { id }
   );
 
   return {
@@ -22,6 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function RecipePage({ params }: Props) {
+  const { id } = await params;
   const session = await getServerSession();
 
   if (!session) {
@@ -43,7 +45,7 @@ export default async function RecipePage({ params }: Props) {
       timesCooked,
       lastCooked
     }
-  `, { id: params.id });
+  `, { id });
 
   if (!recipe) {
     redirect("/recipes");

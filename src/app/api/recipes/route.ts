@@ -1,9 +1,10 @@
 import { getServerSession } from "next-auth";
 import { client } from "@/sanity/lib/client";
 import { NextResponse } from "next/server";
+import { authOptions } from "@/lib/auth";
 
 export async function GET() {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
@@ -31,7 +32,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session?.user) {
     return new NextResponse("Unauthorized", { status: 401 });

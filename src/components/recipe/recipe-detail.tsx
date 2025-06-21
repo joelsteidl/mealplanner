@@ -68,7 +68,12 @@ export function RecipeDetail({ recipe }: RecipeDetailProps) {
       }
 
       const existingPlans = await response.json();
-      const occupiedDates = new Set(existingPlans.map((plan: { date: string }) => plan.date));
+      // Only exclude dates that already have recipes assigned, not just notes
+      const occupiedDates = new Set(
+        existingPlans
+          .filter((plan: { date: string, recipe?: { _id: string } }) => plan.recipe) // Only plans with recipes
+          .map((plan: { date: string }) => plan.date)
+      );
 
       // Filter out occupied dates and format for display
       const available = dates
@@ -104,19 +109,67 @@ export function RecipeDetail({ recipe }: RecipeDetailProps) {
   const handleCookOnDate = async (selectedDate: string) => {
     setIsCooking(true);
     try {
-      const response = await fetch("/api/meal-plans", {
-        method: "POST",
+      // First, check if there's an existing meal plan for this date
+      const existingResponse = await fetch(`/api/meal-plans/get?startDate=${selectedDate}&endDate=${selectedDate}`, {
+        cache: 'no-store',
         headers: {
-          "Content-Type": "application/json",
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
         },
-        body: JSON.stringify({
-          date: selectedDate, // Keep the date as YYYY-MM-DD string format
-          recipeId: recipe._id,
-        }),
       });
 
-      if (!response.ok) {
-        throw new Error(await response.text() || "Failed to add to meal plan");
+      if (existingResponse.ok) {
+        const existingPlans = await existingResponse.json();
+        const existingPlan = existingPlans.find((plan: { date: string }) => plan.date === selectedDate);
+        
+        if (existingPlan && !existingPlan.recipe) {
+          // Update existing meal plan that only has notes
+          const updateResponse = await fetch(`/api/meal-plans/${existingPlan._id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              recipeId: recipe._id,
+              note: existingPlan.note, // Keep existing notes
+            }),
+          });
+
+          if (!updateResponse.ok) {
+            throw new Error(await updateResponse.text() || "Failed to update meal plan");
+          }
+        } else {
+          // Create new meal plan
+          const response = await fetch("/api/meal-plans", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              date: selectedDate,
+              recipeId: recipe._id,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(await response.text() || "Failed to add to meal plan");
+          }
+        }
+      } else {
+        // Create new meal plan if we can't fetch existing plans
+        const response = await fetch("/api/meal-plans", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            date: selectedDate,
+            recipeId: recipe._id,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(await response.text() || "Failed to add to meal plan");
+        }
       }
 
       // Parse the date more carefully to avoid timezone issues

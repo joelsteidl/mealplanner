@@ -33,7 +33,9 @@ export default function RootLayout({
         <AuthProvider>
           <ToastProvider>
             <MainNav />
-            {children}
+            <main className="pt-0">
+              {children}
+            </main>
           </ToastProvider>
         </AuthProvider>
       </body>

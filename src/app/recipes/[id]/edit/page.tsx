@@ -4,12 +4,13 @@ import { client } from "@/sanity/lib/client";
 import { RecipeForm } from "@/components/recipe/recipe-form";
 
 interface EditRecipePageProps {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default async function EditRecipePage({ params }: EditRecipePageProps) {
+  const { id } = await params;
   const session = await getServerSession();
 
   if (!session) {
@@ -17,7 +18,7 @@ export default async function EditRecipePage({ params }: EditRecipePageProps) {
   }
 
   const recipe = await client.fetch(`*[_type == "recipe" && _id == $id][0]`, {
-    id: params.id
+    id
   });
 
   if (!recipe) {

@@ -51,9 +51,11 @@ export function AddMealForm({ date, initialMealPlan }: AddMealFormProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [selectedRecipeTitle, setSelectedRecipeTitle] = useState<string>("");
   const [note, setNote] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [searchError, setSearchError] = useState("");
   const [formErrors, setFormErrors] = useState<{
     recipe?: string;
@@ -96,7 +98,7 @@ export function AddMealForm({ date, initialMealPlan }: AddMealFormProps) {
       }
       const data = await response.json();
       setRecipes(data);
-    } catch (error) {
+    } catch {
       setSearchError("Failed to search recipes. Please try again.");
       showToast("Failed to search recipes", "error");
     } finally {
@@ -173,6 +175,7 @@ export function AddMealForm({ date, initialMealPlan }: AddMealFormProps) {
     }
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleClearRecipe = () => {
     setSelectedRecipe(null);
     setSelectedRecipeTitle("");

@@ -3,17 +3,18 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
 interface PageProps {
-  searchParams: { date?: string };
+  searchParams: Promise<{ date?: string }>;
 }
 
 export default async function AddMealPage({ searchParams }: PageProps) {
+  const { date: dateParam } = await searchParams;
   const session = await getServerSession();
 
   if (!session) {
     redirect("/login");
   }
 
-  const date = searchParams.date ? new Date(searchParams.date) : new Date();
+  const date = dateParam ? new Date(dateParam) : new Date();
 
   return (
     <main className="min-h-screen bg-gray-50 py-8">

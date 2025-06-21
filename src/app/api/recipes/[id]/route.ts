@@ -1,20 +1,22 @@
 import { getServerSession } from "next-auth";
 import { client } from "@/sanity/lib/client";
 import { NextResponse } from "next/server";
+import { authOptions } from "@/lib/auth";
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
   try {
+    const { id } = await params;
     const recipe = await client.fetch(`*[_type == "recipe" && _id == $id][0]`, {
-      id: params.id,
+      id,
     });
 
     if (!recipe) {
@@ -33,15 +35,16 @@ export async function GET(
 
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
   try {
+    const { id } = await params;
     const body = await request.json();
 
     // Clean up empty ingredients and directions
@@ -50,7 +53,7 @@ export async function PUT(
 
     // Update the recipe document
     const recipe = await client
-      .patch(params.id)
+      .patch(id)
       .set({
         title: body.title,
         sourceUrl: body.sourceUrl || undefined,
@@ -75,18 +78,19 @@ export async function PUT(
 
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
   try {
+    const { id } = await params;
     // Check if recipe exists
     const recipe = await client.fetch(`*[_type == "recipe" && _id == $id][0]`, {
-      id: params.id,
+      id,
     });
 
     if (!recipe) {
@@ -96,7 +100,7 @@ export async function DELETE(
     // Check if recipe is used in any meal plans
     const mealPlans = await client.fetch(
       `*[_type == "mealPlan" && references($id)][0]`,
-      { id: params.id }
+      { id }
     );
 
     if (mealPlans) {
@@ -107,7 +111,7 @@ export async function DELETE(
     }
 
     // Delete the recipe
-    await client.delete(params.id);
+    await client.delete(id);
 
     return new NextResponse(null, { status: 204 });
   } catch (error) {

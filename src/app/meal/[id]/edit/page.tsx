@@ -4,12 +4,13 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 
 interface Props {
-  params: {
+  params: Promise<{
     id: string;
-  };
+  }>;
 }
 
 export default async function EditMealPlan({ params }: Props) {
+  const { id } = await params;
   const session = await getServerSession();
 
   if (!session) {
@@ -27,7 +28,7 @@ export default async function EditMealPlan({ params }: Props) {
         rating
       }
     }
-  `, { id: params.id });
+  `, { id });
 
   if (!mealPlan) {
     redirect("/");

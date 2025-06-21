@@ -749,7 +749,7 @@ export function RecipeForm({ recipe: initialRecipe }: RecipeFormProps) {
               <textarea
                 value={ingredient}
                 onChange={e => handleIngredientChange(index, e.target.value)}
-                className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 resize-none"
+                className="flex-1 px-4 py-2 border-2 border-gray-300 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-600 resize-none"
                 placeholder="Enter an ingredient or paste a list..."
                 rows={1}
                 style={{ 
@@ -848,7 +848,7 @@ export function RecipeForm({ recipe: initialRecipe }: RecipeFormProps) {
               <textarea
                 value={direction}
                 onChange={e => handleDirectionChange(index, e.target.value)}
-                className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 resize-none"
+                className="flex-1 px-4 py-2 border-2 border-gray-300 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-600 resize-none"
                 placeholder="Enter a direction step or paste numbered steps..."
                 rows={2}
                 style={{ 
@@ -897,7 +897,7 @@ export function RecipeForm({ recipe: initialRecipe }: RecipeFormProps) {
         <textarea
           value={recipe.notes}
           onChange={e => setRecipe({ ...recipe, notes: e.target.value })}
-          className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700"
+          className="w-full px-4 py-2 border-2 border-gray-300 bg-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-600"
           placeholder="Enter any additional notes..."
           rows={3}
         />

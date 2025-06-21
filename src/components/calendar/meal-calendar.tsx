@@ -19,10 +19,21 @@ interface MealPlan {
   note?: string;
 }
 
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  allDay: boolean;
+  source: string;
+  color: string;
+}
+
 export function MealCalendar() {
   const { showToast } = useToast();
   const [baseDate, setBaseDate] = useState(() => new Date());
   const [mealPlans, setMealPlans] = useState<MealPlan[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isRecipePickerOpen, setIsRecipePickerOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -73,10 +84,50 @@ export function MealCalendar() {
     }
   }, [startDate, dates, showToast]);
 
+  // Fetch calendar events
+  const fetchCalendarEvents = useCallback(async () => {
+    try {
+      const start = format(startDate, 'yyyy-MM-dd');
+      const end = format(dates[dates.length - 1], 'yyyy-MM-dd');
+      
+      const response = await fetch(
+        `/api/calendar/events?startDate=${start}&endDate=${end}`,
+        {
+          cache: 'no-store',
+          headers: {
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma': 'no-cache',
+          },
+        }
+      );
+
+      if (response.ok) {
+        const events = await response.json();
+        console.log('Successfully fetched calendar events:', events.length, 'events');
+        console.log('Raw events data:', events);
+        // Convert string dates back to Date objects
+        const parsedEvents = events.map((event: Omit<CalendarEvent, 'start' | 'end'> & { start: string; end: string }) => ({
+          ...event,
+          start: new Date(event.start),
+          end: new Date(event.end),
+        }));
+        console.log('Parsed events:', parsedEvents);
+        setCalendarEvents(parsedEvents);
+      } else {
+        console.log('No calendar events available or calendar not configured');
+        setCalendarEvents([]);
+      }
+    } catch (error) {
+      console.error("Error fetching calendar events:", error);
+      setCalendarEvents([]);
+    }
+  }, [startDate, dates]);
+
   // Fetch meal plans when the date range changes or refresh is triggered
   useEffect(() => {
     fetchMealPlans();
-  }, [dates, startDate, refreshTrigger, fetchMealPlans]);
+    fetchCalendarEvents(); // Also fetch calendar events
+  }, [dates, startDate, refreshTrigger, fetchMealPlans, fetchCalendarEvents]);
 
   // Listen for focus events to refresh data when returning to the page
   useEffect(() => {
@@ -305,7 +356,9 @@ export function MealCalendar() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-900">Meal Calendar</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {format(startDate, 'MMM d')} - {format(dates[dates.length - 1], 'MMM d, yyyy')}
+          </h1>
           <div className="flex items-center gap-2">
             <button
               onClick={goToPreviousWeek}
@@ -327,9 +380,6 @@ export function MealCalendar() {
             </button>
           </div>
         </div>
-        <div className="text-gray-600 text-sm">
-          {format(startDate, 'MMM d')} - {format(dates[dates.length - 1], 'MMM d, yyyy')}
-        </div>
       </div>
       
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -337,6 +387,30 @@ export function MealCalendar() {
           const mealPlan = mealPlans.find(
             plan => plan.date === format(date, 'yyyy-MM-dd')
           );
+          
+          // Get events for this specific date
+          const eventsForDate = calendarEvents.filter(event => {
+            const eventStart = new Date(event.start);
+            const eventEnd = new Date(event.end);
+            const currentDate = new Date(date);
+            
+            // For all-day events, check if the current date falls within the event range
+            if (event.allDay) {
+              // Set time to beginning of day for comparison
+              eventStart.setHours(0, 0, 0, 0);
+              eventEnd.setHours(23, 59, 59, 999);
+              currentDate.setHours(12, 0, 0, 0); // Use midday to avoid timezone issues
+              
+              return currentDate >= eventStart && currentDate <= eventEnd;
+            } else {
+              // For timed events, check if they start on this date
+              return eventStart.getDate() === date.getDate() &&
+                     eventStart.getMonth() === date.getMonth() &&
+                     eventStart.getFullYear() === date.getFullYear();
+            }
+          });
+          
+          console.log(`Events for ${format(date, 'yyyy-MM-dd')}:`, eventsForDate.length, eventsForDate);
           
           const dateStr = format(date, 'yyyy-MM-dd');
           const isSwapping = swapProgress.isSwapping && 
@@ -351,6 +425,7 @@ export function MealCalendar() {
                 recipe: mealPlan.recipe,
                 note: mealPlan.note
               } : undefined}
+              events={eventsForDate}
               onAddRecipe={handleAddRecipe}
               onSwapMealPlans={handleSwapMealPlans}
               onRefresh={handleRefresh}

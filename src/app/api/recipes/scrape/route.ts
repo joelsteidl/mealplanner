@@ -1,6 +1,7 @@
 import { getServerSession } from "next-auth";
 import { NextResponse } from "next/server";
 import * as cheerio from "cheerio";
+import { authOptions } from "@/lib/auth";
 
 interface RecipeStep {
   "@type"?: string;
@@ -141,7 +142,7 @@ function looksLikeInstruction(text: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const session = await getServerSession();
+  const session = await getServerSession(authOptions);
 
   if (!session) {
     return new NextResponse("Unauthorized", { status: 401 });

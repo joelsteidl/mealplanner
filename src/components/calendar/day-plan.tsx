@@ -1,10 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format, isToday } from "date-fns";
-import { Plus, ExternalLink, GripVertical } from "lucide-react";
+import { Plus, ExternalLink, GripVertical, Calendar, X } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  allDay: boolean;
+  source: string;
+  color: string;
+}
 
 interface DayPlanProps {
   date: Date;
@@ -17,6 +27,7 @@ interface DayPlanProps {
     };
     note?: string;
   };
+  events?: CalendarEvent[]; // Add calendar events
   onAddMeal?: (date: Date) => void; // Made optional since we're not using it
   onAddRecipe: (date: Date) => void;
   onSwapMealPlans: (sourceDate: Date, targetDate: Date) => Promise<void>;
@@ -27,6 +38,7 @@ interface DayPlanProps {
 export function DayPlan({ 
   date, 
   mealPlan, 
+  events = [], // Default to empty array
   onAddRecipe, 
   onSwapMealPlans,
   onRefresh,
@@ -36,17 +48,49 @@ export function DayPlan({
   const [isDragOver, setIsDragOver] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isEventsDrawerOpen, setIsEventsDrawerOpen] = useState(false);
+  
+  const lastMealPlanIdRef = useRef<string | null>(null);
 
-  // Initialize noteText when component mounts or mealPlan changes
+  // Simple initialization - sync note text from server when meal plan changes
   useEffect(() => {
-    console.log('Updating noteText from mealPlan:', { mealPlan, note: mealPlan?.note });
-    setNoteText(mealPlan?.note || "");
-  }, [mealPlan]);
+    const serverNote = mealPlan?.note || "";
+    const mealPlanId = mealPlan?.id || null;
+    
+    // Initialize on first load or when switching to a different meal plan
+    if (lastMealPlanIdRef.current !== mealPlanId) {
+      console.log('Switching meal plan, initializing note text:', { 
+        serverNote, 
+        mealPlanId,
+        lastMealPlanId: lastMealPlanIdRef.current
+      });
+      
+      setNoteText(serverNote);
+      setHasUnsavedChanges(false);
+      lastMealPlanIdRef.current = mealPlanId;
+    }
+  }, [mealPlan?.note, mealPlan?.id]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // No cleanup needed for simple approach
+    };
+  }, []);
 
   const handleSaveNote = async (text: string) => {
+    // Prevent multiple simultaneous saves
+    if (isSaving) {
+      console.log('Save already in progress, skipping');
+      return;
+    }
+    
+    // Track what we're about to save
+    const trimmedText = text.trim() || "";
+    
     setIsSaving(true);
-    console.log('Saving note:', { text, trimmed: text.trim(), mealPlan });
+    console.log('Saving note:', { text, trimmed: trimmedText, mealPlan });
     try {
       if (mealPlan) {
         // Update existing meal plan
@@ -98,7 +142,7 @@ export function DayPlan({
         }
       } else if (text.trim()) {
         // Create new meal plan with just a note
-        await fetch("/api/meal-plans", {
+        const response = await fetch("/api/meal-plans", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -108,17 +152,43 @@ export function DayPlan({
             note: text.trim(),
           }),
         });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('POST request failed:', response.status, errorText);
+          throw new Error(`Failed to create meal plan: ${errorText}`);
+        }
+
+        const newMealPlan = await response.json();
+        console.log('New meal plan created successfully:', newMealPlan);
       }
 
-      // Force refresh with a small delay to ensure API has processed the change
-      if (onRefresh) {
+      // Mark as saved
+      setHasUnsavedChanges(false);
+      
+      // Only refresh if we deleted a meal plan or created a new one (structural changes)
+      // For note-only updates, don't refresh to avoid overwriting local state
+      const createdNewMealPlan = !mealPlan && text.trim();
+      const deletedMealPlan = mealPlan && !text.trim() && !mealPlan.recipe;
+      const needsRefresh = createdNewMealPlan || deletedMealPlan;
+                          
+      if (onRefresh && needsRefresh) {
+        // For new meal plans, we need to delay allowing sync until after refresh
         setTimeout(() => {
-          console.log('Triggering calendar refresh after note save');
+          console.log('Triggering calendar refresh after structural change');
           onRefresh();
-        }, 100);
+        }, 200);
       }
     } catch (error) {
       console.error("Error saving meal plan:", error);
+      
+      // Revert to the last known good state on error
+      const lastGoodNote = mealPlan?.note || "";
+      setNoteText(lastGoodNote);
+      setHasUnsavedChanges(false);
+      
+      // You could show a toast here if you have the toast context available
+      // showToast("Failed to save note", "error");
     } finally {
       setIsSaving(false);
     }
@@ -127,35 +197,22 @@ export function DayPlan({
   const handleNoteChange = (text: string) => {
     console.log('Note text changed:', { text, length: text.length });
     setNoteText(text);
-    
-    // Clear existing timeout
-    if (saveTimeout) {
-      clearTimeout(saveTimeout);
-    }
-    
-    // Set new timeout to save after 1 second of no typing
-    const timeout = setTimeout(() => {
-      console.log('Auto-save timeout triggered for text:', text);
-      handleSaveNote(text);
-    }, 1000);
-    
-    setSaveTimeout(timeout);
+    setHasUnsavedChanges(true); // Mark that we have unsaved changes
+  };
+
+  const handleSaveClick = () => {
+    console.log('Save button clicked, current noteText:', noteText);
+    handleSaveNote(noteText);
   };
 
   const handleStartEditing = () => {
-    // Not needed anymore, the textarea is always available
-    setNoteText(mealPlan?.note || "");
+    console.log('Started editing textarea');
+    // No need to do anything here for simple approach
   };
 
   const handleBlur = () => {
     console.log('Textarea blur event, current noteText:', noteText);
-    // Save immediately on blur if there are unsaved changes
-    if (saveTimeout) {
-      console.log('Clearing timeout and saving immediately on blur');
-      clearTimeout(saveTimeout);
-      setSaveTimeout(null);
-      handleSaveNote(noteText);
-    }
+    // No auto-save on blur for simple approach
   };
 
   const handleClearRecipe = async () => {
@@ -279,13 +336,21 @@ export function DayPlan({
         </div>
       )}
       <div className="flex justify-between items-start mb-3">
-        <div>
+        <div className="flex items-center gap-2 flex-1">
           <h3 className="font-semibold text-gray-900">
-            {format(date, "EEEE")}
+            {format(date, "EEE, MMM d")}
           </h3>
-          <p className="text-sm text-gray-600">
-            {format(date, "MMM d")}
-          </p>
+          {/* Events pill indicator */}
+          {events.length > 0 && (
+            <button
+              onClick={() => setIsEventsDrawerOpen(true)}
+              className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium rounded-full transition-colors"
+              title={`${events.length} event${events.length !== 1 ? 's' : ''}`}
+            >
+              <Calendar className="w-3 h-3" />
+              <span>{events.length}</span>
+            </button>
+          )}
         </div>
         {!mealPlan && (
           <button
@@ -297,6 +362,41 @@ export function DayPlan({
           </button>
         )}
       </div>
+
+      {/* Events Overlay Drawer */}
+      {isEventsDrawerOpen && (
+        <div className="absolute inset-0 bg-white rounded-lg border border-gray-300 shadow-lg p-4 z-10">
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="font-semibold text-gray-900">
+              {format(date, "EEE, MMM d")}
+            </h3>
+            <button
+              onClick={() => setIsEventsDrawerOpen(false)}
+              className="inline-flex items-center justify-center w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full transition-colors"
+              title="Close events"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+          
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {events.map((event) => (
+              <div key={event.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg transition-colors">
+                <div 
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: event.color }}
+                />
+                <span className="text-xs text-gray-500 font-medium">
+                  {event.allDay ? 'All day' : format(event.start, 'h:mm a')}
+                </span>
+                <span className="text-sm text-gray-900 flex-1 truncate" title={event.title}>
+                  {event.title}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {mealPlan ? (
         <div className="space-y-3">
@@ -313,19 +413,34 @@ export function DayPlan({
           ) : null}
           
           {/* Always show textarea for notes, whether meal plan has recipe or not */}
-          <div className="relative">
-            <textarea
-              value={noteText}
-              onChange={(e) => handleNoteChange(e.target.value)}
-              onBlur={handleBlur}
-              placeholder={mealPlan.recipe ? "Add notes..." : "Meal plan..."}
-              className="w-full p-2 text-sm text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white hover:bg-gray-50 focus:bg-white transition-colors"
-              rows={noteText ? Math.max(1, Math.ceil(noteText.length / 50)) : 1}
-            />
-            {isSaving && (
-              <div className="absolute top-2 right-2 text-xs text-gray-500 flex items-center gap-1">
-                <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                Saving...
+          <div className="space-y-2">
+            <div className="relative">
+              <textarea
+                value={noteText}
+                onChange={(e) => handleNoteChange(e.target.value)}
+                onBlur={handleBlur}
+                placeholder={mealPlan.recipe ? "Add notes..." : "Add notes:"}
+                className="w-full p-2 text-sm text-gray-900 placeholder-gray-500 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white hover:bg-gray-50 focus:bg-white transition-colors"
+                rows={noteText ? Math.max(1, Math.ceil(noteText.length / 50)) : 1}
+              />
+              {isSaving && (
+                <div className="absolute top-2 right-2 text-xs text-gray-500 flex items-center gap-1">
+                  <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                  Saving...
+                </div>
+              )}
+            </div>
+            
+            {/* Save button - only show if there are unsaved changes */}
+            {hasUnsavedChanges && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveClick}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSaving ? 'Saving...' : 'Save'}
+                </button>
               </div>
             )}
           </div>
@@ -359,30 +474,54 @@ export function DayPlan({
         </div>
       ) : (
         <div className="py-4 space-y-3">
-          <div className="relative">
-            <textarea
-              value={noteText}
-              onChange={(e) => handleNoteChange(e.target.value)}
-              onBlur={handleBlur}
-              onFocus={handleStartEditing}
-              placeholder="Add meal plan..."
-              className="w-full p-3 text-sm text-gray-900 placeholder-gray-500 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white hover:bg-gray-50 focus:bg-white transition-colors"
-              rows={2}
-            />
-            {isSaving && (
-              <div className="absolute top-2 right-2 text-xs text-gray-500 flex items-center gap-1">
-                <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
-                Saving...
+          <div className="space-y-2">
+            <div className="relative">
+              <textarea
+                value={noteText}
+                onChange={(e) => handleNoteChange(e.target.value)}
+                onBlur={handleBlur}
+                onFocus={handleStartEditing}
+                placeholder="Add notes:"
+                className="w-full p-3 text-sm text-gray-900 placeholder-gray-500 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white hover:bg-gray-50 focus:bg-white transition-colors"
+                rows={2}
+              />
+              {isSaving && (
+                <div className="absolute top-2 right-2 text-xs text-gray-500 flex items-center gap-1">
+                  <div className="w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                  Saving...
+                </div>
+              )}
+            </div>
+            
+            {/* Save button - only show if there are unsaved changes */}
+            {hasUnsavedChanges && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handleSaveClick}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isSaving ? 'Saving...' : 'Save'}
+                </button>
               </div>
             )}
           </div>
-          <button
-            onClick={() => onAddRecipe(date)}
-            className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm bg-blue-50 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Choose Recipe
-          </button>
+          {isHovered && (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }}
+              className="flex gap-2 pt-2 border-t border-gray-100"
+            >
+              <button
+                onClick={() => onAddRecipe(date)}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-50 text-blue-600 border border-blue-200 rounded hover:bg-blue-100 transition-colors"
+                title="Choose recipe"
+              >
+                <Plus className="w-3 h-3" />
+                Choose Recipe
+              </button>
+            </motion.div>
+          )}
         </div>
       )}
     </div>

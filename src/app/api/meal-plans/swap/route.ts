@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions } from '../../auth/[...nextauth]/route';
+import { authOptions } from '@/lib/auth';
 import { client } from '@/sanity/lib/client';
 
 export async function POST(request: NextRequest) {
@@ -63,29 +63,64 @@ export async function POST(request: NextRequest) {
       targetMealPlan: targetMealPlan ? { id: targetMealPlan._id, date: targetMealPlan.date } : null
     });
 
-    // Create a transaction to swap the dates
+    // Create a transaction to swap the content (recipe and notes) while keeping dates
     const transaction = client.transaction();
 
     if (sourceMealPlan && targetMealPlan) {
-      // Both days have meal plans - swap them
-      console.log('Swapping both meal plans');
+      // Both days have meal plans - swap their content
+      console.log('Swapping content of both meal plans');
       transaction.patch(sourceMealPlan._id, {
-        set: { date: targetDate },
+        set: { 
+          recipe: targetMealPlan.recipe || null,
+          note: targetMealPlan.note || ""
+        },
       });
       transaction.patch(targetMealPlan._id, {
-        set: { date: sourceDate },
+        set: { 
+          recipe: sourceMealPlan.recipe || null,
+          note: sourceMealPlan.note || ""
+        },
       });
     } else if (sourceMealPlan && !targetMealPlan) {
-      // Only source has a meal plan - move it to target
-      console.log('Moving source meal plan to target');
-      transaction.patch(sourceMealPlan._id, {
-        set: { date: targetDate },
+      // Only source has a meal plan - create target with source content, clear source content
+      console.log('Moving content from source to target, creating new target meal plan and clearing source');
+      
+      // Create new meal plan for target date with source content
+      transaction.create({
+        _type: 'mealPlan',
+        date: targetDate,
+        user: { _type: 'reference', _ref: session.user.id },
+        recipe: sourceMealPlan.recipe || null,
+        note: sourceMealPlan.note || ""
       });
+      
+      // Clear source meal plan content (but keep the meal plan with its date)
+      transaction.patch(sourceMealPlan._id, {
+        set: { 
+          recipe: null,
+          note: ""
+        },
+      });
+      
     } else if (!sourceMealPlan && targetMealPlan) {
-      // Only target has a meal plan - move it to source
-      console.log('Moving target meal plan to source');
+      // Only target has a meal plan - create source with target content, clear target content
+      console.log('Moving content from target to source, creating new source meal plan and clearing target');
+      
+      // Create new meal plan for source date with target content
+      transaction.create({
+        _type: 'mealPlan',
+        date: sourceDate,
+        user: { _type: 'reference', _ref: session.user.id },
+        recipe: targetMealPlan.recipe || null,
+        note: targetMealPlan.note || ""
+      });
+      
+      // Clear target meal plan content (but keep the meal plan with its date)
       transaction.patch(targetMealPlan._id, {
-        set: { date: sourceDate },
+        set: { 
+          recipe: null,
+          note: ""
+        },
       });
     } else {
       // Neither has a meal plan
