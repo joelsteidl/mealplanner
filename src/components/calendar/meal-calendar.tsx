@@ -84,11 +84,17 @@ export function MealCalendar() {
     }
   }, [startDate, dates, showToast]);
 
-  // Fetch calendar events
+  // Fetch calendar events with expanded date range to catch events that might span multiple days
   const fetchCalendarEvents = useCallback(async () => {
     try {
-      const start = format(startDate, 'yyyy-MM-dd');
-      const end = format(dates[dates.length - 1], 'yyyy-MM-dd');
+      // Expand the date range by a few days on each side to catch multi-day events
+      const expandedStart = addDays(startDate, -3);
+      const expandedEnd = addDays(dates[dates.length - 1], 3);
+      
+      const start = format(expandedStart, 'yyyy-MM-dd');
+      const end = format(expandedEnd, 'yyyy-MM-dd');
+      
+      console.log(`Fetching calendar events from ${start} to ${end} (expanded range)`);
       
       const response = await fetch(
         `/api/calendar/events?startDate=${start}&endDate=${end}`,
@@ -356,9 +362,11 @@ export function MealCalendar() {
     <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-900">
-            {format(startDate, 'MMM d')} - {format(dates[dates.length - 1], 'MMM d, yyyy')}
-          </h1>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {format(startDate, 'MMM d')} - {format(dates[dates.length - 1], 'MMM d, yyyy')}
+            </h1>
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={goToPreviousWeek}
@@ -382,7 +390,7 @@ export function MealCalendar() {
         </div>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 overflow-visible">
         {dates.map((date) => {
           const mealPlan = mealPlans.find(
             plan => plan.date === format(date, 'yyyy-MM-dd')

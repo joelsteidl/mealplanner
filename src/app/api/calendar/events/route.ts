@@ -7,6 +7,8 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
+    console.log('Calendar events API called with:', { startDate, endDate });
+
     if (!startDate || !endDate) {
       return NextResponse.json(
         { error: 'startDate and endDate are required' },
@@ -24,7 +26,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    console.log('Fetching calendar events between:', start.toISOString(), 'and', end.toISOString());
+
     const events = await fetchCalendarEvents(start, end);
+
+    console.log(`Returning ${events.length} calendar events`);
 
     return NextResponse.json(events, {
       headers: {
@@ -34,7 +40,10 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('Error fetching calendar events:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch calendar events' },
+      { 
+        error: 'Failed to fetch calendar events',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }

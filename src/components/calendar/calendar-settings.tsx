@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, Globe } from "lucide-react";
+import { Plus, Trash2, Globe, RefreshCw, Check } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 
 interface CalendarSource {
@@ -17,6 +17,8 @@ export function CalendarSettings() {
   const [sources, setSources] = useState<CalendarSource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshComplete, setRefreshComplete] = useState(false);
   const [newSource, setNewSource] = useState({
     name: "",
     url: "",
@@ -98,6 +100,39 @@ export function CalendarSettings() {
     }
   };
 
+  // Refresh calendar data
+  const refreshCalendarData = async () => {
+    setIsRefreshing(true);
+    setRefreshComplete(false);
+    
+    try {
+      // Call the debug endpoint to clear cache and refresh calendar data
+      const response = await fetch('/api/calendar/debug', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (response.ok) {
+        showToast('Calendar data refreshed successfully', 'success');
+        setRefreshComplete(true);
+        
+        // Reset the completion state after a delay
+        setTimeout(() => {
+          setRefreshComplete(false);
+        }, 2000);
+      } else {
+        throw new Error('Failed to refresh calendar data');
+      }
+    } catch (error) {
+      console.error('Error refreshing calendar data:', error);
+      showToast('Failed to refresh calendar data', 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const toggleSource = async (id: string, enabled: boolean) => {
     try {
       const response = await fetch('/api/calendar/sources', {
@@ -133,7 +168,7 @@ export function CalendarSettings() {
     <div>
       <h2 className="text-lg font-medium text-gray-900 mb-4">Calendar Integration</h2>
       <p className="text-sm text-gray-600 mb-6">
-        Add ICS calendar URLs to show events in your meal planner. Events after 4 PM will be displayed to help with dinner planning.
+        Add ICS calendar URLs to show events in your meal planner. Event filtering can be configured via environment variables (set NEXT_PUBLIC_EVENT_FILTER_HOUR to a number 0-23, or &lsquo;none&rsquo; to show all events).
       </p>
 
       {/* Add new calendar form */}
@@ -241,6 +276,46 @@ export function CalendarSettings() {
             </div>
           ))
         )}
+      </div>
+
+      {/* Calendar Refresh Section */}
+      <div className="mt-8">
+        <h3 className="text-lg font-medium text-gray-900 mb-4">Calendar Data</h3>
+        <div className="p-4 border border-gray-200 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div>
+              <h4 className="font-medium text-gray-900">Refresh Calendar Events</h4>
+              <p className="text-sm text-gray-500 mt-1">
+                Clear cache and fetch the latest events from all calendar sources
+              </p>
+            </div>
+            <button
+              onClick={refreshCalendarData}
+              disabled={isRefreshing}
+              className={`
+                inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all
+                ${isRefreshing 
+                  ? 'bg-blue-50 text-blue-600 cursor-not-allowed' 
+                  : refreshComplete
+                    ? 'bg-green-50 text-green-600'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }
+              `}
+            >
+              {refreshComplete ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  Refreshed
+                </>
+              ) : (
+                <>
+                  <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  {isRefreshing ? 'Refreshing...' : 'Refresh Calendar'}
+                </>
+              )}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Instructions */}

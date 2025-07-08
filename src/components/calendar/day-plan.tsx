@@ -5,6 +5,7 @@ import { format, isToday } from "date-fns";
 import { Plus, ExternalLink, GripVertical, Calendar, X } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { formatInTimeZone, getUserTimezone } from "@/lib/timezone-utils";
 
 interface CalendarEvent {
   id: string;
@@ -50,7 +51,14 @@ export function DayPlan({
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isEventsDrawerOpen, setIsEventsDrawerOpen] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
   
+  // Close events drawer and cleanup
+  const closeEventsDrawer = () => {
+    setIsEventsDrawerOpen(false);
+    setIsHovered(false); // Reset hover state when closing
+  };
+
   const lastMealPlanIdRef = useRef<string | null>(null);
 
   // Simple initialization - sync note text from server when meal plan changes
@@ -313,12 +321,14 @@ export function DayPlan({
 
   return (
     <div
+      ref={cardRef}
       className={`
         relative p-4 bg-white rounded-lg shadow hover:shadow-md transition-all transform hover:scale-105
         ${todayClass}
         ${dragOverClass}
         ${mealPlan ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'}
         ${globalSwapping ? 'opacity-75' : ''}
+        ${isEventsDrawerOpen ? 'z-[9997]' : ''}
       `}
       // Native HTML5 drag and drop - make sure ALL days can receive drops
       draggable={!!mealPlan && !globalSwapping}
@@ -326,8 +336,8 @@ export function DayPlan({
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={() => !isEventsDrawerOpen && setIsHovered(true)}
+      onMouseLeave={() => !isEventsDrawerOpen && setIsHovered(false)}
     >
       {/* Drag indicator for meals */}
       {mealPlan && (
@@ -363,39 +373,67 @@ export function DayPlan({
         )}
       </div>
 
+
+
       {/* Events Overlay Drawer */}
       {isEventsDrawerOpen && (
-        <div className="absolute inset-0 bg-white rounded-lg border border-gray-300 shadow-lg p-4 z-10">
-          <div className="flex items-center gap-2 mb-3">
-            <h3 className="font-semibold text-gray-900">
-              {format(date, "EEE, MMM d")}
-            </h3>
-            <button
-              onClick={() => setIsEventsDrawerOpen(false)}
-              className="inline-flex items-center justify-center w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full transition-colors"
-              title="Close events"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-          
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            {events.map((event) => (
-              <div key={event.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded-lg transition-colors">
+        <>
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 z-[9998]" 
+            onClick={closeEventsDrawer}
+          />
+          {/* Events Panel - positioned to overlay this specific card */}
+          <div 
+            className="absolute inset-0 bg-white rounded-lg border border-gray-300 shadow-2xl p-4 z-[9999]"
+            style={{
+              minHeight: 'fit-content',
+              height: 'auto',
+            }}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-gray-900">
+                {format(date, "EEE, MMM d")} Events
+              </h3>
+              <button
+                onClick={closeEventsDrawer}
+                className="inline-flex items-center justify-center w-6 h-6 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-full transition-colors"
+                title="Close events"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            
+            <div className="space-y-2 overflow-y-auto max-h-64">
+              {events.map((event) => (
                 <div 
-                  className="w-2 h-2 rounded-full flex-shrink-0"
-                  style={{ backgroundColor: event.color }}
-                />
-                <span className="text-xs text-gray-500 font-medium">
-                  {event.allDay ? 'All day' : format(event.start, 'h:mm a')}
-                </span>
-                <span className="text-sm text-gray-900 flex-1 truncate" title={event.title}>
-                  {event.title}
-                </span>
-              </div>
-            ))}
+                  key={event.id} 
+                  className="flex items-start gap-2 p-2 rounded-lg transition-colors bg-gray-50 border border-gray-200 hover:bg-gray-100"
+                  style={{
+                    borderLeftColor: event.color,
+                    borderLeftWidth: '3px',
+                  }}
+                  title={`${event.title} - ${
+                    event.allDay ? 'All day' : (() => {
+                      const userTz = getUserTimezone();
+                      return formatInTimeZone(event.start, userTz, 'h:mm a');
+                    })()
+                  }`}
+                >
+                  <span className="text-xs text-gray-500 font-medium flex-shrink-0 mt-0.5">
+                    {event.allDay ? 'All day' : (() => {
+                      // Format time in user's timezone
+                      const userTz = getUserTimezone();
+                      return formatInTimeZone(event.start, userTz, 'h:mm a');
+                    })()}
+                  </span>
+                  <span className="text-sm text-gray-900 flex-1 leading-relaxed">
+                    {event.title}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        </>
       )}
 
       {mealPlan ? (
