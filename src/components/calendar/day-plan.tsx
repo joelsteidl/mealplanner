@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { format, isToday } from "date-fns";
-import { Plus, ExternalLink, GripVertical, Calendar, X } from "lucide-react";
+import { Plus, ExternalLink, GripVertical, Calendar, X, Globe } from "lucide-react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { formatInTimeZone, getUserTimezone } from "@/lib/timezone-utils";
@@ -25,6 +25,7 @@ interface DayPlanProps {
       _id: string;
       title: string;
       rating: number;
+      sourceUrl?: string;
     };
     note?: string;
   };
@@ -51,6 +52,7 @@ export function DayPlan({
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [isEventsDrawerOpen, setIsEventsDrawerOpen] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   
   // Close events drawer and cleanup
@@ -67,18 +69,25 @@ export function DayPlan({
     const mealPlanId = mealPlan?.id || null;
     
     // Initialize on first load or when switching to a different meal plan
-    if (lastMealPlanIdRef.current !== mealPlanId) {
+    // Don't overwrite if we just saved (prevents refresh from overwriting local state)
+    if (lastMealPlanIdRef.current !== mealPlanId && !justSaved) {
       console.log('Switching meal plan, initializing note text:', { 
         serverNote, 
         mealPlanId,
-        lastMealPlanId: lastMealPlanIdRef.current
+        lastMealPlanId: lastMealPlanIdRef.current,
+        justSaved
       });
       
       setNoteText(serverNote);
       setHasUnsavedChanges(false);
       lastMealPlanIdRef.current = mealPlanId;
+    } else if (justSaved) {
+      // Just update the ref without changing local state
+      lastMealPlanIdRef.current = mealPlanId;
+      // Clear the justSaved flag after a short delay
+      setTimeout(() => setJustSaved(false), 1000);
     }
-  }, [mealPlan?.note, mealPlan?.id]);
+  }, [mealPlan?.note, mealPlan?.id, justSaved]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -173,19 +182,18 @@ export function DayPlan({
 
       // Mark as saved
       setHasUnsavedChanges(false);
+      setJustSaved(true); // Prevent immediate overwrite from refresh
       
-      // Only refresh if we deleted a meal plan or created a new one (structural changes)
-      // For note-only updates, don't refresh to avoid overwriting local state
+      // Always refresh when creating a new meal plan or deleting one (structural changes)
+      // For note-only updates on existing meal plans, don't refresh to avoid overwriting local state
       const createdNewMealPlan = !mealPlan && text.trim();
       const deletedMealPlan = mealPlan && !text.trim() && !mealPlan.recipe;
       const needsRefresh = createdNewMealPlan || deletedMealPlan;
                           
-      if (onRefresh && needsRefresh) {
-        // For new meal plans, we need to delay allowing sync until after refresh
-        setTimeout(() => {
-          console.log('Triggering calendar refresh after structural change');
-          onRefresh();
-        }, 200);
+      if (needsRefresh && onRefresh) {
+        // For structural changes, always refresh to sync with server state
+        console.log('Triggering calendar refresh after structural change:', { createdNewMealPlan, deletedMealPlan });
+        onRefresh();
       }
     } catch (error) {
       console.error("Error saving meal plan:", error);
@@ -439,14 +447,26 @@ export function DayPlan({
       {mealPlan ? (
         <div className="space-y-3">
           {mealPlan.recipe ? (
-            <div>
+            <div className="flex items-center gap-2">
               <Link
                 href={`/recipes/${mealPlan.recipe._id}?from=calendar`}
-                className="group flex items-start gap-1 text-blue-600 hover:text-blue-800 font-medium"
+                className="group flex items-start gap-1 text-blue-600 hover:text-blue-800 font-medium flex-1"
               >
                 <span className="flex-1">{mealPlan.recipe.title}</span>
                 <ExternalLink className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
               </Link>
+              {/* Website link if available */}
+              {mealPlan.recipe.sourceUrl && (
+                <a
+                  href={mealPlan.recipe.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                  title="View original recipe"
+                >
+                  <Globe className="w-4 h-4" />
+                </a>
+              )}
             </div>
           ) : null}
           

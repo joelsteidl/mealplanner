@@ -11,6 +11,7 @@ interface MealPlanResponse {
     _id: string;
     title: string;
     rating: number;
+    sourceUrl?: string;
   };
 }
 
@@ -38,7 +39,8 @@ export async function GET(request: Request) {
         "recipe": recipe-> {
           _id,
           title,
-          rating
+          rating,
+          sourceUrl
         }
       }
     `, { startDate, endDate, userId: session.user.id });
