@@ -48,15 +48,27 @@ export async function PUT(
     }
 
     // Update the meal plan document
+    const updateData: {
+      note?: string;
+      recipe?: { _type: string; _ref: string } | null;
+    } = {};
+
+    // Always update the note if provided
+    if (note !== undefined) {
+      updateData.note = finalNote !== undefined ? finalNote : "";
+    }
+
+    // Only update recipe if a recipeId is explicitly provided (including null to clear)
+    if (recipeId !== undefined) {
+      updateData.recipe = recipeId ? {
+        _type: "reference",
+        _ref: recipeId
+      } : null;
+    }
+
     const mealPlan = await client
       .patch(id)
-      .set({
-        note: finalNote !== undefined ? finalNote : "", // Explicitly handle empty strings
-        recipe: recipeId ? {
-          _type: "reference",
-          _ref: recipeId
-        } : null, // Use null instead of undefined for clearing
-      })
+      .set(updateData)
       .commit();
 
     // Handle recipe count updates

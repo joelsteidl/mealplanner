@@ -165,7 +165,7 @@ export function DayPlan({
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            date: date.toISOString(),
+            date: format(date, 'yyyy-MM-dd'),
             note: text.trim(),
           }),
         });
